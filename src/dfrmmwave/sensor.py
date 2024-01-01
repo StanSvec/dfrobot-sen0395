@@ -12,6 +12,7 @@ class Sensor:
         self.stopped = False
         self.handlers: List[Tuple[Callable[[str], bool], bool]] = [(self._presence_handler, False)]
         self.observers: List[Callable[[bool], None]] = []
+        self.presence_value = 2  # 2 -> Unknown
 
     def start(self):
         while not self.stopped:
@@ -19,17 +20,21 @@ class Sensor:
                 msg_raw = self.serial.readline()
                 msg = msg_raw.decode('utf-8').rstrip()
                 self._handle_message(msg)
-                print(msg)
+                # print(msg)
             time.sleep(1)
 
     def _presence_handler(self, msg):
         presence_match = re.match(r'^\$JYBSS,([01])', msg)
-        if presence_match:
+        if not presence_match:
             return False
 
-        presence_value = presence_match.group(1)
-        for observer in self.observers:
-            observer(bool(presence_value))
+        presence_value = int(presence_match.group(1))
+
+        if self.presence_value != presence_value:
+            self.presence_value = presence_value
+
+            for observer in self.observers:
+                observer(bool(self.presence_value))
 
         return True
 
@@ -49,7 +54,12 @@ class Sensor:
         print('closed')
 
 
+def print_presence_change(present):
+    print(present)
+
+
 s = Sensor(serial.Serial('/dev/ttyAMA0', 115200, timeout=1))
+s.observers.append(print_presence_change)
 try:
     s.start()
 except KeyboardInterrupt:
